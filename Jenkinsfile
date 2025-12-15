@@ -9,7 +9,8 @@ pipeline {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${IMAGE_TAG}"
         LATEST_TAG = "${DOCKER_IMAGE}:latest"
-        DOCKER_REGISTRY = "docker.io" // or your registry
+        DEPLOY_IMAGE = ""  // Will be set dynamically
+        DEPLOY_TAG = ""    // Will be set dynamically
     }
     
     tools {
@@ -34,10 +35,6 @@ pipeline {
             steps {
                 script {
                     echo 'Installing Node.js dependencies...'
-                    // Use npm ci for clean install (like package-lock.json)
-                    //sh 'npm ci'
-                    
-                    // Or if you want to install globally for the pipeline
                     sh 'npm install'
                 }
             }
@@ -47,10 +44,7 @@ pipeline {
             steps {
                 script {
                     echo 'Running tests...'
-                    // Run tests if you have test scripts
-                    sh 'npm test || true' // Continue even if tests fail
-                    
-                    // Run linting if configured
+                    sh 'npm test || true'
                     sh 'npm run lint || true'
                 }
             }
@@ -60,7 +54,6 @@ pipeline {
             steps {
                 script {
                     echo 'Building application...'
-                    // Run build script if you have one (for frontend assets, etc.)
                     sh 'npm run build || echo "No build script found, skipping build step"'
                 }
             }
@@ -77,16 +70,13 @@ pipeline {
                         passwordVariable: 'DOCKER_PASSWORD', 
                         usernameVariable: 'DOCKER_USERNAME'
                     )]) {
-                        // Login to Docker Hub
                         sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin"
                         
-                        // Setup buildx for multi-platform builds
                         sh '''
                             docker buildx create --name multi-platform-builder --use --bootstrap || true
                             docker buildx inspect --bootstrap
                         '''
                         
-                        // Build and push multi-platform image
                         sh """
                             docker buildx build \
                             --platform linux/amd64,linux/arm64 \
@@ -95,9 +85,14 @@ pipeline {
                             --push .
                         """
                         
-                        // Logout after push
                         sh 'docker logout'
                     }
+                    
+                    // Set the deployment image to use
+                    env.DEPLOY_IMAGE = env.FULL_IMAGE_TAG
+                    env.DEPLOY_TAG = env.IMAGE_TAG
+                    
+                    echo "Deployment image set to: ${DEPLOY_IMAGE}"
                 }
             }
         }
@@ -105,7 +100,7 @@ pipeline {
         stage('Verify Image') {
             steps {
                 script {
-                    echo 'Verifying multi-platform image was created...'
+                    echo "Verifying multi-platform image: ${DEPLOY_IMAGE}"
                     withCredentials([usernamePassword(
                         credentialsId: 'docker-hub-repo', 
                         passwordVariable: 'DOCKER_PASSWORD', 
@@ -113,7 +108,7 @@ pipeline {
                     )]) {
                         sh """
                             docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD
-                            docker buildx imagetools inspect ${FULL_IMAGE_TAG}
+                            docker buildx imagetools inspect ${DEPLOY_IMAGE}
                             docker logout
                         """
                     }
@@ -124,24 +119,34 @@ pipeline {
         stage('Deploy to Environment') {
             when {
                 expression { 
-                    // Only deploy on main branch or specific branches
                     env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' 
                 }
             }
             steps {
                 script {
-                    echo "Deploying ${FULL_IMAGE_TAG} to production..."
-                    // Add your deployment logic here
-                    def dockerCmd = 'docker run -p 3000:3000 -d vectorzy/nodejs-web:v3'
+                    echo "Deploying ${DEPLOY_IMAGE} to production..."
+                    echo "Using tag: ${DEPLOY_TAG}"
+                    
+                    // Method 1: Deploy specific tagged image
+                    def dockerCmd = "docker run -p 3000:3000 -d ${DEPLOY_IMAGE}"
+                    // OR Method 2: Deploy latest image
+                    // def dockerCmd = "docker run -p 3000:3000 -d ${LATEST_TAG}"
+                    
                     sshagent(['ubuntu-server-key']) {
-                        sh "ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 ${dockerCmd}"
+                        sh "ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '${dockerCmd}'"
                     }
                     
-                    // For Kubernetes:
-                    // sh "kubectl set image deployment/nodejs-app nodejs-app=${FULL_IMAGE_TAG}"
-                    
-                    // For Docker Swarm:
-                    // sh "docker service update --image ${FULL_IMAGE_TAG} nodejs-service"
+                    // Alternative: Pull and run on target server
+                    sshagent(['ubuntu-server-key']) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
+                                docker pull ${DEPLOY_IMAGE} || true
+                                docker stop nodejs-app || true
+                                docker rm nodejs-app || true
+                                docker run -d --name nodejs-app -p 3000:3000 ${DEPLOY_IMAGE}
+                            '
+                        """
+                    }
                 }
             }
         }
@@ -150,13 +155,8 @@ pipeline {
             steps {
                 script {
                     echo 'Cleaning up workspace...'
-                    // Clean Docker build cache
                     sh 'docker builder prune -f || true'
-                    
-                    // Optional: Clean old images
                     sh 'docker image prune -f || true'
-                    
-                    // Clean npm cache if needed
                     sh 'npm cache clean --force || true'
                 }
             }
@@ -166,24 +166,15 @@ pipeline {
     post {
         always {
             echo 'Pipeline completed. Cleaning up...'
-            // Clean up buildx builder
             sh 'docker buildx rm multi-platform-builder || true'
-            
-            // Archive artifacts if any
             archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
-            
-            // Clean workspace
             cleanWs()
         }
         success {
-            echo 'Pipeline succeeded!'
-            // Send success notification
-            // emailext body: "Node.js app ${IMAGE_TAG} built and pushed successfully!", subject: "Pipeline Success: ${JOB_NAME}", to: 'team@example.com'
+            echo "Pipeline succeeded! Image deployed: ${DEPLOY_IMAGE}"
         }
         failure {
             echo 'Pipeline failed!'
-            // Send failure notification
-            // emailext body: "Pipeline ${BUILD_URL} failed!", subject: "Pipeline Failure: ${JOB_NAME}", to: 'team@example.com'
         }
     }
 }
