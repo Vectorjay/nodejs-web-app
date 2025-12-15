@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Node.js Web App</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-rocket"></i> Node.js Web App</h1>
+            <p class="subtitle">A full-featured web application with backend API</p>
+            <nav>
+                <a href="/" class="nav-link active"><i class="fas fa-home"></i> Home</a>
+                <a href="/about" class="nav-link"><i class="fas fa-info-circle"></i> About</a>
+                <a href="/api-docs" class="nav-link" target="_blank"><i class="fas fa-code"></i> API Docs</a>
+            </nav>
+        </header>
+
+        <div class="app-description">
+            <p>This is a complete Node.js web application with a frontend interface and backend API. 
+               Try out the features below that communicate with the server!</p>
+        </div>
+
+        <div class="main-content">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-server"></i> Server-Side Text Processing</h2>
+                <div class="input-group">
+                    <label for="user-text">Enter your text:</label>
+                    <textarea id="user-text" placeholder="Type or paste your text here...">This text will be processed on the server and the results returned via API.</textarea>
+                </div>
+                <button class="btn" id="process-btn">
+                    <i class="fas fa-cogs"></i> Process on Server
+                </button>
+                
+                <div class="result-box">
+                    <h3>Server Response</h3>
+                    <div id="text-result">
+                        <p>Results from the server will appear here...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-database"></i> Task Management</h2>
+                <div class="input-group">
+                    <label for="new-task">Add a new task (saved on server):</label>
+                    <input type="text" id="new-task" placeholder="Enter a task to do...">
+                </div>
+                <button class="btn" id="add-task-btn">
+                    <i class="fas fa-plus"></i> Add Task to Server
+                </button>
+                
+                <div class="result-box">
+                    <h3>Server Task Response</h3>
+                    <div id="task-response">
+                        <p>Server response for tasks will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2 class="card-title"><i class="fas fa-chart-bar"></i> Application Status</h2>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="server-status">Checking...</div>
+                    <div class="stat-label">Server Status</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="api-status">Checking...</div>
+                    <div class="stat-label">API Status</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="uptime">--:--:--</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="requests">0</div>
+                    <div class="stat-label">Requests</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2 class="card-title"><i class="fas fa-terminal"></i> Server Console</h2>
+            <div class="console" id="server-console">
+                <div class="console-line">> Starting application...</div>
+                <div class="console-line">> Loading modules...</div>
+                <div class="console-line">> Server ready on port <span id="port-display">3000</span></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Node.js Web App &copy; 2023 | Built with Express.js</p>
+            <p>Deployable to Heroku, Render, Railway, or any Node.js hosting service</p>
+            <div class="footer-links">
+                <a href="https://nodejs.org" target="_blank">Node.js</a> | 
+                <a href="https://expressjs.com" target="_blank">Express</a> | 
+                <a href="https://github.com" target="_blank">GitHub</a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
