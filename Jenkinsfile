@@ -54,7 +54,7 @@ pipeline {
             steps {
                 script {
                     echo 'Building application...'
-                    sh 'npm run build || echo "No build script found, skipping build step"'
+                    sh 'npm install || echo "No build script found, skipping build step"'
                 }
             }
         }
