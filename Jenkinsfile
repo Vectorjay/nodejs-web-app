@@ -133,7 +133,7 @@ pipeline {
                     echo "Deploying ${FULL_IMAGE_TAG} to production..."
                     // Add your deployment logic here
                     def dockerCmd = 'docker run -p 3000:3000 -d vectorzy/nodejs-web:v3'
-                    sshagent(['ec2-server']) {
+                    sshagent(['ubuntu-server-key']) {
                         sh "ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 ${dockerCmd}"
                     }
                     
