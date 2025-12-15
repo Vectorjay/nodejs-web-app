@@ -14,7 +14,7 @@ pipeline {
     
     tools {
         // Add Node.js tool if configured in Jenkins
-        nodejs '20.19.6' // Update to match your Jenkins Node.js installation name
+        nodejs 'NodeJS-20.19.6' // Update to match your Jenkins Node.js installation name
     }
     
     stages {
