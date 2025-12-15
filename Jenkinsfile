@@ -132,7 +132,10 @@ pipeline {
                 script {
                     echo "Deploying ${FULL_IMAGE_TAG} to production..."
                     // Add your deployment logic here
-                    // Example: Update Kubernetes deployment, AWS ECS, etc.
+                    def dockerCmd = 'docker run -p 3000:3000 -d vectorzy/nodejs-web:v3'
+                    sshagent(['ec2-server']) {
+                        sh "ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 ${dockerCmd}"
+                    }
                     
                     // For Kubernetes:
                     // sh "kubectl set image deployment/nodejs-app nodejs-app=${FULL_IMAGE_TAG}"
