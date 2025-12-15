@@ -9,13 +9,10 @@ pipeline {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${IMAGE_TAG}"
         LATEST_TAG = "${DOCKER_IMAGE}:latest"
-        DEPLOY_IMAGE = ""  // Will be set dynamically
-        DEPLOY_TAG = ""    // Will be set dynamically
     }
     
     tools {
-        // Add Node.js tool if configured in Jenkins
-        nodejs 'nodejs' // Update to match your Jenkins Node.js installation name
+        nodejs 'nodejs'
     }
     
     stages {
@@ -54,7 +51,7 @@ pipeline {
             steps {
                 script {
                     echo 'Building application...'
-                    sh 'npm install || echo "No build script found, skipping build step"'
+                    sh 'npm run build || echo "No build script found, skipping build step"'
                 }
             }
         }
@@ -87,12 +84,6 @@ pipeline {
                         
                         sh 'docker logout'
                     }
-                    
-                    // Set the deployment image to use
-                    env.DEPLOY_IMAGE = env.FULL_IMAGE_TAG
-                    env.DEPLOY_TAG = env.IMAGE_TAG
-                    
-                    echo "Deployment image set to: ${DEPLOY_IMAGE}"
                 }
             }
         }
@@ -100,7 +91,7 @@ pipeline {
         stage('Verify Image') {
             steps {
                 script {
-                    echo "Verifying multi-platform image: ${DEPLOY_IMAGE}"
+                    echo "Verifying multi-platform image: ${FULL_IMAGE_TAG}"
                     withCredentials([usernamePassword(
                         credentialsId: 'docker-hub-repo', 
                         passwordVariable: 'DOCKER_PASSWORD', 
@@ -108,7 +99,7 @@ pipeline {
                     )]) {
                         sh """
                             docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD
-                            docker buildx imagetools inspect ${DEPLOY_IMAGE}
+                            docker buildx imagetools inspect ${FULL_IMAGE_TAG}
                             docker logout
                         """
                     }
@@ -124,26 +115,37 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Deploying ${DEPLOY_IMAGE} to production..."
-                    echo "Using tag: ${DEPLOY_TAG}"
+                    echo "Deploying ${FULL_IMAGE_TAG} to production..."
                     
-                    // Method 1: Deploy specific tagged image
-                    def dockerCmd = "docker run -p 3000:3000 -d ${DEPLOY_IMAGE}"
-                    // OR Method 2: Deploy latest image
-                    // def dockerCmd = "docker run -p 3000:3000 -d ${LATEST_TAG}"
+                    // Choose which image to deploy - you can use FULL_IMAGE_TAG or LATEST_TAG
+                    def deployImage = env.FULL_IMAGE_TAG  // or env.LATEST_TAG
                     
-                    sshagent(['ubuntu-server-key']) {
-                        sh "ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '${dockerCmd}'"
-                    }
-                    
-                    // Alternative: Pull and run on target server
                     sshagent(['ubuntu-server-key']) {
                         sh """
                             ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
-                                docker pull ${DEPLOY_IMAGE} || true
-                                docker stop nodejs-app || true
-                                docker rm nodejs-app || true
-                                docker run -d --name nodejs-app -p 3000:3000 ${DEPLOY_IMAGE}
+                                # Pull the image
+                                docker pull ${deployImage}
+                                
+                                # Stop and remove existing container if it exists
+                                if docker ps -a --format "{{.Names}}" | grep -q "^nodejs-app\$"; then
+                                    echo "Stopping existing nodejs-app container..."
+                                    docker stop nodejs-app
+                                    docker rm nodejs-app
+                                fi
+                                
+                                # Run new container
+                                echo "Starting new container with ${deployImage}..."
+                                docker run -d \
+                                    --name nodejs-app \
+                                    --restart unless-stopped \
+                                    -p 3000:3000 \
+                                    -e NODE_ENV=production \
+                                    ${deployImage}
+                                
+                                # Verify container is running
+                                sleep 5
+                                echo "Container status:"
+                                docker ps --filter "name=nodejs-app" --format "table {{.Names}}\\t{{.Status}}"
                             '
                         """
                     }
@@ -169,9 +171,27 @@ pipeline {
             sh 'docker buildx rm multi-platform-builder || true'
             archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
             cleanWs()
+            
+            // Log the image that was built (if available)
+            script {
+                try {
+                    echo "Built image: ${FULL_IMAGE_TAG}"
+                } catch (Exception e) {
+                    echo "Image information not available"
+                }
+            }
         }
         success {
-            echo "Pipeline succeeded! Image deployed: ${DEPLOY_IMAGE}"
+            script {
+                // Use try-catch to handle missing properties
+                def imageInfo = "Unknown"
+                try {
+                    imageInfo = env.FULL_IMAGE_TAG ?: "Image tag not set"
+                } catch (Exception e) {
+                    imageInfo = "Image information unavailable"
+                }
+                echo "Pipeline succeeded! Image: ${imageInfo}"
+            }
         }
         failure {
             echo 'Pipeline failed!'
