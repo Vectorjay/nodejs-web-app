@@ -1,200 +1,144 @@
 pipeline {
     agent any
-    
-    environment {
-        // Use package.json version or generate timestamp-based version
-        NODE_VERSION = sh(script: 'node -p "require(\'./package.json\').version"', returnStdout: true).trim()
-        BUILD_TIMESTAMP = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
-        IMAGE_TAG = "${NODE_VERSION}-${BUILD_NUMBER}-${BUILD_TIMESTAMP}"
-        DOCKER_IMAGE = "vectorzy/nodejs-web-app"
-        FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${IMAGE_TAG}"
-        LATEST_TAG = "${DOCKER_IMAGE}:latest"
-    }
-    
+
     tools {
         nodejs 'nodejs'
     }
-    
+
+    environment {
+        DOCKER_IMAGE = "vectorzy/nodejs-web-app"
+    }
+
     stages {
-        
-        stage('Checkout and Setup') {
+
+        stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Resolve Version') {
+            steps {
                 script {
-                    echo "Building Node.js app version: ${NODE_VERSION}"
-                    echo "Build Number: ${BUILD_NUMBER}"
-                    echo "Image Tag: ${IMAGE_TAG}"
+                    env.NODE_VERSION = sh(
+                        script: 'node -p "require(\'./package.json\').version"',
+                        returnStdout: true
+                    ).trim()
+
+                    env.BUILD_TIMESTAMP = sh(
+                        script: 'date +%Y%m%d%H%M%S',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = "${env.NODE_VERSION}-${env.BUILD_NUMBER}-${env.BUILD_TIMESTAMP}"
+                    env.FULL_IMAGE_TAG = "${env.DOCKER_IMAGE}:${env.IMAGE_TAG}"
+                    env.LATEST_TAG = "${env.DOCKER_IMAGE}:latest"
+
+                    echo "Version: ${env.NODE_VERSION}"
+                    echo "Image: ${env.FULL_IMAGE_TAG}"
                 }
             }
         }
-        
+
         stage('Install Dependencies') {
             steps {
-                script {
-                    echo 'Installing Node.js dependencies...'
-                    sh 'npm install'
-                }
+                sh 'npm install'
             }
         }
-        
-        stage('Run Tests') {
+
+        stage('Test') {
             steps {
-                script {
-                    echo 'Running tests...'
-                    sh 'npm test || true'
-                    sh 'npm run lint || true'
-                }
+                sh 'npm test || true'
+                sh 'npm run lint || true'
             }
         }
-        
-        stage('Build Application') {
+
+        stage('Build App') {
             steps {
-                script {
-                    echo 'Building application...'
-                    sh 'npm run build || echo "No build script found, skipping build step"'
-                }
+                sh 'npm run build || echo "No build step"'
             }
         }
-        
-        stage('Build Docker Image (Multi-Platform)') {
+
+        stage('Docker Build & Push (Multi-Arch)') {
             steps {
-                script {
-                    echo "Building multi-platform Docker image: ${FULL_IMAGE_TAG}"
-                    echo "Platforms: linux/amd64, linux/arm64"
-                    
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub-repo', 
-                        passwordVariable: 'DOCKER_PASSWORD', 
-                        usernameVariable: 'DOCKER_USERNAME'
-                    )]) {
-                        sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin"
-                        
-                        sh '''
-                            docker buildx create --name multi-platform-builder --use --bootstrap || true
-                            docker buildx inspect --bootstrap
-                        '''
-                        
-                        sh """
-                            docker buildx build \
-                            --platform linux/amd64,linux/arm64 \
-                            -t ${FULL_IMAGE_TAG} \
-                            -t ${LATEST_TAG} \
-                            --push .
-                        """
-                        
-                        sh 'docker logout'
-                    }
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-hub-repo',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+
+                    sh """
+                        echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
+
+                        docker buildx create --name multiarch --use --bootstrap || true
+
+                        docker buildx build \
+                          --platform linux/amd64,linux/arm64 \
+                          -t ${env.FULL_IMAGE_TAG} \
+                          -t ${env.LATEST_TAG} \
+                          --push .
+
+                        docker logout
+                    """
                 }
             }
         }
-        
+
         stage('Verify Image') {
             steps {
-                script {
-                    echo "Verifying multi-platform image: ${FULL_IMAGE_TAG}"
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub-repo', 
-                        passwordVariable: 'DOCKER_PASSWORD', 
-                        usernameVariable: 'DOCKER_USERNAME'
-                    )]) {
-                        sh """
-                            docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD
-                            docker buildx imagetools inspect ${FULL_IMAGE_TAG}
-                            docker logout
-                        """
-                    }
-                }
+                sh "docker buildx imagetools inspect ${env.FULL_IMAGE_TAG}"
             }
         }
-        
-        stage('Deploy to Environment') {
+
+        stage('Deploy (Main Branch Only)') {
             when {
-                expression { 
-                    env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' 
-                }
+                branch 'main'
             }
             steps {
-                script {
-                    echo "Deploying ${FULL_IMAGE_TAG} to production..."
-                    
-                    // Choose which image to deploy - you can use FULL_IMAGE_TAG or LATEST_TAG
-                    def deployImage = env.FULL_IMAGE_TAG  // or env.LATEST_TAG
-                    
-                    sshagent(['ubuntu-server-key']) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
-                                # Pull the image
-                                docker pull ${deployImage}
-                                
-                                # Stop and remove existing container if it exists
-                                if docker ps -a --format "{{.Names}}" | grep -q "^nodejs-app\$"; then
-                                    echo "Stopping existing nodejs-app container..."
-                                    docker stop nodejs-app
-                                    docker rm nodejs-app
-                                fi
-                                
-                                # Run new container
-                                echo "Starting new container with ${deployImage}..."
-                                docker run -d \
-                                    --name nodejs-app \
-                                    --restart unless-stopped \
-                                    -p 3000:3000 \
-                                    -e NODE_ENV=production \
-                                    ${deployImage}
-                                
-                                # Verify container is running
-                                sleep 5
-                                echo "Container status:"
-                                docker ps --filter "name=nodejs-app" --format "table {{.Names}}\\t{{.Status}}"
-                            '
-                        """
-                    }
+                sshagent(['ubuntu-server-key']) {
+                    sh """
+                        scp docker-compose.yaml ubuntu@13.51.242.134:/home/ubuntu/docker-compose.yaml
+
+                        ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
+                            set -e
+
+                            export IMAGE_NAME=${env.FULL_IMAGE_TAG}
+                            cd /home/ubuntu
+
+                            docker compose pull
+                            docker compose down
+                            docker compose up -d
+
+                            sleep 5
+                            docker ps --filter "name=nodejs-app" --format "table {{.Names}}\\t{{.Status}}"
+                        '
+                    """
                 }
             }
         }
-        
+
         stage('Cleanup') {
             steps {
-                script {
-                    echo 'Cleaning up workspace...'
-                    sh 'docker builder prune -f || true'
-                    sh 'docker image prune -f || true'
-                    sh 'npm cache clean --force || true'
-                }
+                sh 'docker builder prune -f || true'
+                sh 'docker image prune -f || true'
+                sh 'npm cache clean --force || true'
             }
         }
     }
-    
+
     post {
         always {
-            echo 'Pipeline completed. Cleaning up...'
-            sh 'docker buildx rm multi-platform-builder || true'
-            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
+            sh 'docker buildx rm multiarch || true'
             cleanWs()
-            
-            // Log the image that was built (if available)
-            script {
-                try {
-                    echo "Built image: ${FULL_IMAGE_TAG}"
-                } catch (Exception e) {
-                    echo "Image information not available"
-                }
-            }
         }
+
         success {
-            script {
-                // Use try-catch to handle missing properties
-                def imageInfo = "Unknown"
-                try {
-                    imageInfo = env.FULL_IMAGE_TAG ?: "Image tag not set"
-                } catch (Exception e) {
-                    imageInfo = "Image information unavailable"
-                }
-                echo "Pipeline succeeded! Image: ${imageInfo}"
-            }
+            echo "✅ Pipeline succeeded"
+            echo "Image: ${env.FULL_IMAGE_TAG}"
         }
+
         failure {
-            echo 'Pipeline failed!'
+            echo "❌ Pipeline failed"
         }
     }
 }
