@@ -1,0 +1,6 @@
+version: '3.8'
+services:
+    Nodejs-web:
+        image: vectorzy/nodejs-web-app
+        ports:
+          - 3000:3000
