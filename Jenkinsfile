@@ -126,19 +126,23 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            sh 'docker buildx rm multiarch || true'
-            cleanWs()
-        }
+    stage("commit version update") {
+            steps{
+                script{
+                    withCredentials([usernamePassword(credentialsId: 'github-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+                        sh 'git config --global user.email "jenkins@example.com"'
+                        sh 'git config --global user.name "jenkins"'
 
-        success {
-            echo "✅ Pipeline succeeded"
-            echo "Image: ${env.FULL_IMAGE_TAG}"
-        }
+                        sh 'git status'
+                        sh 'git branch'
+                        sh 'git config --list'
 
-        failure {
-            echo "❌ Pipeline failed"
+                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/apps-demo.git"
+                        sh 'git add .'
+                        sh 'git commit -m "ci: version bump"'
+                        sh 'git push origin HEAD:refs/heads/jenkins-jobs'
+                    }
+                }
+            }
         }
-    }
 }
