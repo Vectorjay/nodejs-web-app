@@ -137,7 +137,7 @@ pipeline {
                         sh 'git branch'
                         sh 'git config --list'
 
-                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/apps-demo.git"
+                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git"
                         sh 'git add .'
                         sh 'git commit -m "ci: version bump"'
                         sh 'git push origin HEAD:refs/heads/jenkins-jobs'
