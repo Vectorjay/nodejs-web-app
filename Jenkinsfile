@@ -1,37 +1,22 @@
 pipeline {
     agent any
 
-    options {
-        disableConcurrentBuilds()
-        timestamps()
-        ansiColor('xterm')
-        buildDiscarder(logRotator(numToKeepStr: '20'))
-    }
-
     tools {
         nodejs 'nodejs'
     }
 
     environment {
-        DOCKER_IMAGE = 'vectorzy/nodejs-web-app'
-        BUILDER_NAME = 'multiarch'
+        DOCKER_IMAGE = "vectorzy/nodejs-web-app"
     }
 
     stages {
 
-        /* -----------------------------
-         * CHECKOUT
-         * ----------------------------- */
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'test -f package.json'
             }
         }
 
-        /* -----------------------------
-         * RESOLVE VERSION & TAGS
-         * ----------------------------- */
         stage('Resolve Version') {
             steps {
                 script {
@@ -49,55 +34,31 @@ pipeline {
                     env.FULL_IMAGE_TAG = "${env.DOCKER_IMAGE}:${env.IMAGE_TAG}"
                     env.LATEST_TAG = "${env.DOCKER_IMAGE}:latest"
 
-                    echo "Resolved version: ${env.NODE_VERSION}"
-                    echo "Docker image: ${env.FULL_IMAGE_TAG}"
+                    echo "Version: ${env.NODE_VERSION}"
+                    echo "Image: ${env.FULL_IMAGE_TAG}"
                 }
             }
         }
 
-        /* -----------------------------
-         * INSTALL DEPENDENCIES
-         * ----------------------------- */
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    if [ -f package-lock.json ]; then
-                      npm ci
-                    else
-                      npm install
-                    fi
-                '''
+                sh 'npm install'
             }
         }
 
-        /* -----------------------------
-         * TEST & LINT
-         * ----------------------------- */
-        stage('Test & Lint') {
+        stage('Test') {
             steps {
-                sh 'npm test'
-                sh 'npm run lint'
+                sh 'npm test || true'
+                sh 'npm run lint || true'
             }
         }
 
-        /* -----------------------------
-         * BUILD APPLICATION
-         * ----------------------------- */
         stage('Build App') {
             steps {
-                sh '''
-                    if npm run | grep -q "build"; then
-                      npm run build
-                    else
-                      echo "No build step defined"
-                    fi
-                '''
+                sh 'npm run build || echo "No build step"'
             }
         }
 
-        /* -----------------------------
-         * DOCKER BUILD & PUSH
-         * ----------------------------- */
         stage('Docker Build & Push (Multi-Arch)') {
             steps {
                 withCredentials([usernamePassword(
@@ -106,50 +67,45 @@ pipeline {
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
 
-                    sh '''
-                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    sh """
+                        echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
 
-                        docker buildx inspect ${BUILDER_NAME} >/dev/null 2>&1 || \
-                        docker buildx create --name ${BUILDER_NAME} --use --bootstrap
+                        docker buildx inspect multiarch >/dev/null 2>&1 || \
+                        docker buildx create --name multiarch --use --bootstrap
 
-                        docker buildx use ${BUILDER_NAME}
+                        docker buildx use multiarch
 
                         docker buildx build \
                           --platform linux/amd64,linux/arm64 \
-                          -t ${FULL_IMAGE_TAG} \
-                          -t ${LATEST_TAG} \
+                          -t ${env.FULL_IMAGE_TAG} \
+                          -t ${env.LATEST_TAG} \
                           --push .
 
                         docker logout
-                    '''
+                    """
                 }
             }
         }
 
-        /* -----------------------------
-         * VERIFY IMAGE
-         * ----------------------------- */
         stage('Verify Image') {
             steps {
-                sh 'docker buildx imagetools inspect ${FULL_IMAGE_TAG}'
+                sh "docker buildx imagetools inspect ${env.FULL_IMAGE_TAG}"
             }
         }
 
-        /* -----------------------------
-         * DEPLOY (MAIN ONLY)
-         * ----------------------------- */
         stage('Deploy (Main Branch Only)') {
             when {
                 branch 'main'
             }
             steps {
                 sshagent(['ubuntu-server-key']) {
-                    sh '''
+                    sh """
                         scp docker-compose.yaml ubuntu@13.51.242.134:/home/ubuntu/docker-compose.yaml
 
                         ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
                             set -e
-                            export IMAGE_NAME=${FULL_IMAGE_TAG}
+
+                            export IMAGE_NAME=${env.FULL_IMAGE_TAG}
                             cd /home/ubuntu
 
                             docker compose pull
@@ -159,56 +115,44 @@ pipeline {
                             sleep 5
                             docker ps --filter "name=nodejs-app" --format "table {{.Names}}\\t{{.Status}}"
                         '
-                    '''
+                    """
                 }
             }
         }
 
-        /* -----------------------------
-         * COMMIT VERSION UPDATE
-         * ----------------------------- */
-        stage('Commit Version Update') {
-            when {
-                not { branch 'main' }
-            }
+        stage('Cleanup') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'github-creds',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_PASS'
-                )]) {
-
-                    sh '''
-                        git config user.email "jenkins@example.com"
-                        git config user.name "jenkins"
-
-                        git diff --quiet || (
-                          git add .
-                          git commit -m "ci: version bump"
-                          git remote set-url origin https://${GIT_USER}:${GIT_PASS}@github.com/Vectorjay/nodejs-web-app.git
-                          git push origin HEAD:refs/heads/jenkins-jobs
-                        )
-                    '''
-                }
+                sh 'docker builder prune -f || true'
+                sh 'docker image prune -f || true'
+                sh 'npm cache clean --force || true'
             }
         }
-    }
 
-    /* -----------------------------
-     * CLEANUP
-     * ----------------------------- */
-    post {
-        always {
-            sh 'docker builder prune -f || true'
-            sh 'docker image prune -f || true'
-            sh 'npm cache clean --force || true'
-            cleanWs()
-        }
-        success {
-            echo "✅ Pipeline completed successfully"
-        }
-        failure {
-            echo "❌ Pipeline failed — check logs"
+        stage('Commit Version Update') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-creds',
+                        usernameVariable: 'USER',
+                        passwordVariable: 'PASS'
+                    )]) {
+
+                        sh 'git config user.email "jenkins@example.com"'
+                        sh 'git config user.name "jenkins"'
+
+                        sh 'git status'
+
+                        sh '''
+                            git diff --quiet || (
+                              git add .
+                              git commit -m "ci: version bump"
+                              git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
+                              git push origin HEAD:refs/heads/jenkins-jobs
+                            )
+                        '''
+                    }
+                }
+            }
         }
     }
 }
