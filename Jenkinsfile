@@ -124,12 +124,12 @@ pipeline {
                 sh 'npm cache clean --force || true'
             }
         }
-    }
 
-    stage("commit version update") {
-            steps{
-                script{
-                    withCredentials([usernamePassword(credentialsId: 'github-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+        // THIS WAS OUTSIDE THE STAGES BLOCK - NOW MOVED INSIDE
+        stage("commit version update") {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
                         sh 'git config --global user.email "jenkins@example.com"'
                         sh 'git config --global user.name "jenkins"'
 
@@ -145,4 +145,5 @@ pipeline {
                 }
             }
         }
-}
+    } 
+} 
