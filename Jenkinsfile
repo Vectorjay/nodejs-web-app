@@ -22,7 +22,7 @@ pipeline {
                     ).trim()
 
                     env.BUILD_TIMESTAMP = sh(
-                        script: 'date +%Y%m%d%H%M%S',
+                        script: 'date +%Y%m%d%H%M%S"',
                         returnStdout: true
                     ).trim()
 
@@ -55,37 +55,50 @@ pipeline {
             }
         }
 
+        /* ===============================
+           DOCKER BUILD (RUNS IN AGENT)
+           =============================== */
         stage('Docker Build & Push (Multi-Arch)') {
+            agent {
+                docker {
+                    image 'docker:26-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-hub-repo',
                     usernameVariable: 'DOCKER_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
+                    sh '''
+                        docker version
 
-                    sh """
-                        echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-                        docker buildx inspect multiarch >/dev/null 2>&1 || \
-                        docker buildx create --name multiarch --use --bootstrap
-
-                        docker buildx use multiarch
+                        docker buildx create --name multiarch --use --bootstrap || docker buildx use multiarch
 
                         docker buildx build \
                           --platform linux/amd64,linux/arm64 \
-                          -t ${env.FULL_IMAGE_TAG} \
-                          -t ${env.LATEST_TAG} \
+                          -t ${FULL_IMAGE_TAG} \
+                          -t ${LATEST_TAG} \
                           --push .
 
                         docker logout
-                    """
+                    '''
                 }
             }
         }
 
         stage('Verify Image') {
+            agent {
+                docker {
+                    image 'docker:26-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
-                sh "docker buildx imagetools inspect ${env.FULL_IMAGE_TAG}"
+                sh 'docker buildx imagetools inspect ${FULL_IMAGE_TAG}'
             }
         }
 
@@ -100,7 +113,6 @@ pipeline {
 
                         ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 '
                             set -e
-
                             export IMAGE_NAME=${env.FULL_IMAGE_TAG}
                             cd /home/ubuntu
 
@@ -117,36 +129,39 @@ pipeline {
         }
 
         stage('Cleanup') {
+            agent {
+                docker {
+                    image 'docker:26-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
-                sh 'docker builder prune -f || true'
-                sh 'docker image prune -f || true'
-                sh 'npm cache clean --force || true'
+                sh '''
+                    docker builder prune -f || true
+                    docker image prune -f || true
+                '''
             }
         }
 
         stage('Commit Version Update') {
             steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-creds',
-                        usernameVariable: 'USER',
-                        passwordVariable: 'PASS'
-                    )]) {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-creds',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
 
-                        sh 'git config user.email "jenkins@example.com"'
-                        sh 'git config user.name "jenkins"'
+                    sh '''
+                        git config user.email "jenkins@example.com"
+                        git config user.name "jenkins"
 
-                        sh 'git status'
-
-                        sh '''
-                            git diff --quiet || (
-                              git add .
-                              git commit -m "ci: version bump"
-                              git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
-                              git push origin HEAD:refs/heads/jenkins-jobs
-                            )
-                        '''
-                    }
+                        git diff --quiet || (
+                          git add .
+                          git commit -m "ci: version bump"
+                          git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
+                          git push origin HEAD:refs/heads/jenkins-jobs
+                        )
+                    '''
                 }
             }
         }
