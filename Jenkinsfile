@@ -1,15 +1,34 @@
 pipeline {
-    agent any
-
-    tools{
-        docker 'latest'
+    agent {
+        docker {
+            image 'docker:20.10-dind'
+            args '--privileged --storage-driver vfs -v /tmp:/tmp'
+            reuseNode true
+        }
     }
 
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
+        DOCKER_TLS_CERTDIR = ""
     }
 
     stages {
+        stage('Start Docker Daemon') {
+            steps {
+                sh '''
+                    # Start Docker daemon
+                    dockerd &
+                    sleep 15
+                    
+                    # Test Docker
+                    docker info
+                    docker buildx version
+                    
+                    # Create buildx builder if needed
+                    docker buildx create --name mybuilder --use --bootstrap || true
+                '''
+            }
+        }
 
         stage('Checkout') {
             steps {
@@ -68,17 +87,20 @@ pipeline {
                 )]) {
 
                     sh """
+                        # Login to Docker Hub
                         echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
 
+                        # Ensure buildx is ready
                         docker buildx inspect multiarch >/dev/null 2>&1 || \
                         docker buildx create --name multiarch --use --bootstrap
 
                         docker buildx use multiarch
 
-                        docker buildx build \
-                          --platform linux/amd64,linux/arm64 \
-                          -t ${env.FULL_IMAGE_TAG} \
-                          -t ${env.LATEST_TAG} \
+                        # Build and push multi-architecture images
+                        docker buildx build \\
+                          --platform linux/amd64,linux/arm64 \\
+                          -t ${env.FULL_IMAGE_TAG} \\
+                          -t ${env.LATEST_TAG} \\
                           --push .
 
                         docker logout
@@ -122,8 +144,13 @@ pipeline {
 
         stage('Cleanup') {
             steps {
-                sh 'docker builder prune -f || true'
-                sh 'docker image prune -f || true'
+                sh '''
+                    # Clean Docker resources
+                    docker builder prune -f || true
+                    docker image prune -f || true
+                    docker container prune -f || true
+                    docker system prune -f || true
+                '''
                 sh 'npm cache clean --force || true'
             }
         }
@@ -137,10 +164,11 @@ pipeline {
                         passwordVariable: 'PASS'
                     )]) {
 
-                        sh 'git config user.email "jenkins@example.com"'
-                        sh 'git config user.name "jenkins"'
-
-                        sh 'git status'
+                        sh '''
+                            git config user.email "jenkins@example.com"
+                            git config user.name "jenkins"
+                            git status
+                        '''
 
                         sh '''
                             git diff --quiet || (
