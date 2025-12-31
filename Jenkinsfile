@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'nodejs'
-    }
-
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
     }
