@@ -82,27 +82,51 @@ pipeline {
         }
         
         stage('Commit Version Update') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-creds',
-                        usernameVariable: 'USER',
-                        passwordVariable: 'PASS'
-                    )]) {
-                        sh '''
-                            git config user.email "jenkins@example.com"
-                            git config user.name "jenkins"
-                            git status
-                        '''
+                    try {
+                        // Check if there are any changes
+                        def changes = sh(script: 'git status --porcelain', returnStdout: true).trim()
                         
-                        sh '''
-                            git diff --quiet || (
-                              git add .
-                              git commit -m "ci: version bump"
-                              git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
-                              git push origin HEAD:refs/heads/jenkins-jobs
-                            )
-                        '''
+                        if (changes) {
+                            echo "Found changes to commit: ${changes}"
+                            
+                            withCredentials([
+                                usernamePassword(
+                                    credentialsId: 'github-creds',
+                                    usernameVariable: 'GIT_USER',
+                                    passwordVariable: 'GIT_TOKEN'
+                                )
+                            ]) {
+                                sh """
+                                    # Set git config
+                                    git config user.email "jenkins@example.com"
+                                    git config user.name "jenkins"
+                                    
+                                    # Add only tracked files (safer)
+                                    git add -u
+                                    
+                                    # Commit
+                                    git commit -m "ci: update for build ${env.BUILD_NUMBER} [skip ci]"
+                                    
+                                    # Push to current branch
+                                    git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Vectorjay/nodejs-web-app.git HEAD:${env.BRANCH_NAME}
+                                """
+                            }
+                            echo "Changes committed successfully"
+                        } else {
+                            echo "No changes to commit"
+                        }
+                    } catch (Exception e) {
+                        echo "Failed to commit changes: ${e.message}"
+                        echo "Continuing pipeline..."
+                        // Don't fail the whole pipeline
                     }
                 }
             }
@@ -113,6 +137,12 @@ pipeline {
         always {
             sh 'docker system prune -f || true'
             cleanWs()
+        }
+        success {
+            echo "✅ Pipeline completed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed!"
         }
     }
 }
