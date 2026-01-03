@@ -82,12 +82,6 @@ pipeline {
         }
         
         stage('Commit Version Update') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                }
-            }
             steps {
                 script {
                     withCredentials([usernamePassword(
