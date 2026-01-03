@@ -3,6 +3,7 @@ pipeline {
     
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
+        SERVER_DIR = "/home/ubuntu"
     }
     
     stages {
@@ -23,7 +24,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Simple tag - just use build number
                     def tag = "build-${env.BUILD_NUMBER}"
                     env.FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${tag}"
                     
@@ -34,14 +34,11 @@ pipeline {
                     )]) {
                         sh """
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+                            docker build -t ${env.FULL_IMAGE_TAG} .
+                            docker push ${env.FULL_IMAGE_TAG}
                             
-                            # Simple single-arch build (much faster)
-                            docker build -t ${DOCKER_IMAGE}:${tag} .
-                            docker push ${DOCKER_IMAGE}:${tag}
-                            
-                            # Also tag as latest if on main branch
                             if [ "${env.BRANCH_NAME}" = "main" ]; then
-                                docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
+                                docker tag ${env.FULL_IMAGE_TAG} ${DOCKER_IMAGE}:latest
                                 docker push ${DOCKER_IMAGE}:latest
                             fi
                             
@@ -58,15 +55,25 @@ pipeline {
             }
             steps {
                 script {
-                    def tag = "build-${env.BUILD_NUMBER}"
-                    
                     sshagent(['ubuntu-server-key']) {
                         sh """
                             ssh -o StrictHostKeyChecking=no ubuntu@13.53.44.237 "
-                                cd /home/ubuntu
-                                docker pull ${DOCKER_IMAGE}:${tag}
-                                docker-compose down
-                                docker-compose up -d
+                                # Pull the new image
+                                docker pull ${env.FULL_IMAGE_TAG}
+                                
+                                # Stop and remove old container if exists
+                                docker stop nodejs-app 2>/dev/null || echo 'No container to stop'
+                                docker rm nodejs-app 2>/dev/null || echo 'No container to remove'
+                                
+                                # Run new container
+                                docker run -d \\
+                                  --name nodejs-app \\
+                                  -p 3000:3000 \\
+                                  --restart unless-stopped \\
+                                  ${env.FULL_IMAGE_TAG}
+                                
+                                echo 'Container started!'
+                                docker ps | grep nodejs-app
                             "
                         """
                     }
@@ -75,6 +82,12 @@ pipeline {
         }
         
         stage('Commit Version Update') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 script {
                     withCredentials([usernamePassword(
@@ -92,7 +105,7 @@ pipeline {
                             git diff --quiet || (
                               git add .
                               git commit -m "ci: version bump"
-                              git remote set-url origin https://\${USER}:\${PASS}@github.com/Vectorjay/nodejs-web-app.git
+                              git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
                               git push origin HEAD:refs/heads/jenkins-jobs
                             )
                         '''
