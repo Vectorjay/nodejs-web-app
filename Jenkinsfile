@@ -61,7 +61,7 @@ pipeline {
                     
                     sshagent(['ubuntu-server-key']) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@13.51.242.134 "
+                            ssh -o StrictHostKeyChecking=no ubuntu@13.53.44.237 "
                                 cd /home/ubuntu
                                 docker pull ${DOCKER_IMAGE}:${tag}
                                 docker-compose down
