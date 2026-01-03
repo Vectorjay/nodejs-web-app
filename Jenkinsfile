@@ -73,7 +73,7 @@ pipeline {
                 }
             }
         }
-    }
+        
         stage('Commit Version Update') {
             steps {
                 script {
@@ -92,7 +92,7 @@ pipeline {
                             git diff --quiet || (
                               git add .
                               git commit -m "ci: version bump"
-                              git remote set-url origin https://${USER}:${PASS}@github.com/Vectorjay/nodejs-web-app.git
+                              git remote set-url origin https://\${USER}:\${PASS}@github.com/Vectorjay/nodejs-web-app.git
                               git push origin HEAD:refs/heads/jenkins-jobs
                             )
                         '''
