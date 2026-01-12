@@ -55,28 +55,16 @@ pipeline {
             when {
                 branch 'main'
             }
+            environment{
+                AWS_ACCESS_KEY_ID = credentials ('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials ('jenkins-aws_secret_access_key')
+            }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-jenkins']
-                ]) {
-                    sh """
-                        echo '🔐 Verifying AWS identity'
-                        aws sts get-caller-identity
-
-                        echo '📦 Updating kubeconfig'
-                        aws eks update-kubeconfig \
-                          --region ${AWS_REGION} \
-                          --name ${EKS_CLUSTER}
-
-                        echo '🚀 Deploying image to EKS'
-                        kubectl set image deployment/nodejs-app \
-                          nodejs-app=${env.FULL_IMAGE_TAG}
-
-                        echo '⏳ Waiting for rollout'
-                        kubectl rollout status deployment/nodejs-app
-                    """
+                script{
+                    echo 'deploying docker image...'
+                    sh 'kubectl create deployment nginx-deployment --image=nginx'
                 }
+                
             }
         }
 
