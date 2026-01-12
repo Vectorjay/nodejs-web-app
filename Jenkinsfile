@@ -4,11 +4,10 @@ pipeline {
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         AWS_REGION   = "us-east-1"
-        EKS_CLUSTER  = "your-eks-cluster-name"
+        EKS_CLUSTER  = "demo-cluster"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -55,16 +54,60 @@ pipeline {
             when {
                 branch 'main'
             }
-            environment{
-                AWS_ACCESS_KEY_ID = credentials ('jenkins_aws_access_key_id')
-                AWS_SECRET_ACCESS_KEY = credentials ('jenkins-aws_secret_access_key')
+            environment {
+                AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
             }
             steps {
-                script{
-                    echo 'deploying docker image...'
-                    sh 'kubectl create deployment nginx-deployment --image=nginx'
+                script {
+                    echo '🚀 Deploying to EKS...'
+                    
+                    sh '''
+                        # Set AWS credentials
+                        export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+                        export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+                        export AWS_DEFAULT_REGION="${AWS_REGION}"
+                        
+                        # Clean up any role environment variables
+                        unset AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_SESSION_NAME 2>/dev/null || true
+                        
+                        # Generate fresh kubeconfig
+                        echo "Generating kubeconfig..."
+                        rm -f ~/.kube/config
+                        aws eks update-kubeconfig \
+                          --region ${AWS_REGION} \
+                          --name ${EKS_CLUSTER}
+                        
+                        # Test connection
+                        echo "Testing EKS connection..."
+                        kubectl get nodes
+                        
+                        # Deploy your app
+                        echo "Deploying application..."
+                        
+                        # Update or create deployment
+                        kubectl set image deployment/nodejs-app nodejs-app=${FULL_IMAGE_TAG} \
+                          --namespace=default \
+                          --record || \
+                          kubectl create deployment nodejs-app \
+                            --image=${FULL_IMAGE_TAG} \
+                            --namespace=default
+                        
+                        # Create service if it doesn't exist
+                        kubectl expose deployment nodejs-app \
+                          --type=LoadBalancer \
+                          --port=80 \
+                          --target-port=3000 \
+                          --name=nodejs-app-service \
+                          --namespace=default \
+                          --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        echo "Waiting for rollout..."
+                        kubectl rollout status deployment/nodejs-app --namespace=default --timeout=120s
+                        
+                        echo "✅ Deployment complete!"
+                    '''
                 }
-                
             }
         }
 
