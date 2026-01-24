@@ -71,14 +71,24 @@ pipeline {
                         set -e
 
                         echo "🚀 Deploying application"
+
                         export FULL_IMAGE_TAG="$FULL_IMAGE_TAG"
                         export APP_NAME="$APP_NAME"
 
-                        envsubst < kubernetes/deployment.yaml | kubectl apply -f -
-                        envsubst < kubernetes/service.yaml | kubectl apply -f -
+                        # Force kubeconfig location
+                        export KUBECONFIG=$HOME/.kube/config
+
+                        echo "🔎 Kubernetes context"
+                        kubectl config current-context
+                        kubectl cluster-info
+
+                        envsubst < kubernetes/deployment.yaml | kubectl apply -f - --validate=false
+                        envsubst < kubernetes/service.yaml | kubectl apply -f - --validate=false
                     '''
                 }
             }
+
+
 
 
         }
