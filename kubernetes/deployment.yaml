@@ -6,9 +6,17 @@ metadata:
     app: $APP_NAME
 spec:
   replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # create 1 extra pod during update
+      maxUnavailable: 0 # ensure zero downtime
+
   selector:
     matchLabels:
       app: $APP_NAME
+
   template:
     metadata:
       labels:
@@ -21,4 +29,4 @@ spec:
           image: nodejs-web-app:$FULL_IMAGE_TAG
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000 
+            - containerPort: 3000
