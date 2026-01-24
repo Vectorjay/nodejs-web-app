@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         AWS_REGION   = "us-east-1"
-        EKS_CLUSTER  = "demo-cluster"
+        EKS_CLUSTER  = "app-cluster"
     }
 
     stages {
