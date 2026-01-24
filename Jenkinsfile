@@ -70,17 +70,30 @@ pipeline {
                     sh '''
                         set -e
 
-                        echo "🚀 Deploying application"
+                        echo "🏠 Jenkins HOME"
+                        echo "HOME=$HOME"
 
-                        export FULL_IMAGE_TAG="$FULL_IMAGE_TAG"
-                        export APP_NAME="$APP_NAME"
+                        # Ensure kube directory exists
+                        mkdir -p $HOME/.kube
 
-                        # Force kubeconfig location
-                        export KUBECONFIG=$HOME/.kube/config_file
+                        echo "🔐 AWS identity"
+                        aws sts get-caller-identity
+
+                        echo "📦 Creating kubeconfig for EKS"
+                        aws eks update-kubeconfig \
+                        --region us-east-1 \
+                        --name demo-cluster \
+                        --kubeconfig $HOME/.kube/config
+
+                        export KUBECONFIG=$HOME/.kube/config
 
                         echo "🔎 Kubernetes context"
                         kubectl config current-context
-                        kubectl cluster-info
+                        kubectl get nodes
+
+                        echo "🚀 Deploying application"
+                        export FULL_IMAGE_TAG="$FULL_IMAGE_TAG"
+                        export APP_NAME="$APP_NAME"
 
                         envsubst < kubernetes/deployment.yaml | kubectl apply -f - --validate=false
                         envsubst < kubernetes/service.yaml | kubectl apply -f - --validate=false
@@ -91,9 +104,9 @@ pipeline {
 
 
 
+
         }
     }
-
     post {
         always {
             sh 'docker system prune -f || true'
