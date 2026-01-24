@@ -66,11 +66,21 @@ pipeline {
 
             steps {
                 script {
-                    echo 'delopying docker image ...'
-                    sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
-                    sh 'envsubst < kubernetes/service.yaml | kubectl apply -f -'
+                    echo 'deploying docker image ...'
+                    sh '''
+                        set -e
+
+                        echo "🚀 Deploying application"
+                        export FULL_IMAGE_TAG="$FULL_IMAGE_TAG"
+                        export APP_NAME="$APP_NAME"
+
+                        envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+                        envsubst < kubernetes/service.yaml | kubectl apply -f -
+                    '''
                 }
             }
+
+
         }
     }
 
