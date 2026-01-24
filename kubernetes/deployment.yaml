@@ -21,4 +21,4 @@ spec:
           image: nodejs-web-app:$FULL_IMAGE_TAG
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - containerPort: 3000 
