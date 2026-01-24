@@ -82,7 +82,7 @@ pipeline {
                         echo "📦 Creating kubeconfig for EKS"
                         aws eks update-kubeconfig \
                         --region us-east-1 \
-                        --name demo-cluster \
+                        --name app-cluster \
                         --kubeconfig $HOME/.kube/config
 
                         export KUBECONFIG=$HOME/.kube/config
