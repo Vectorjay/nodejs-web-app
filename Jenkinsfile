@@ -89,32 +89,70 @@
 // }
 pipeline {
   agent any
+
+  environment {
+    AWS_REGION  = 'us-east-1'
+    EKS_CLUSTER = 'app-cluster'
+  }
+
   stages {
-    stage('build app') {
+
+    stage('Build App') {
       steps {
-        script {
-          echo "building the application..."
-        }
+        echo "🔧 Building the application..."
+        // your build steps go here
       }
     }
-    stage('build image') {
+
+    stage('Build Image') {
       steps {
-        script {
-          echo "building the docker image..."
-        }
+        echo "🐳 Building the docker image..."
+        // docker build / push goes here
       }
     }
-    stage('deploy') {
+
+    stage('Deploy to EKS') {
       environment {
-        AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
-        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
+        AWS_ACCESS_KEY_ID     = credentials('jenkins_aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+        AWS_DEFAULT_REGION    = 'us-east-1'
       }
       steps {
         script {
-          echo 'deploying docker image...'
-          sh 'kubectl create deployment nginx-deployment --image=nginx'
+          sh '''
+            set -e
+
+            echo "🔐 Checking AWS identity (Jenkins)"
+            aws sts get-caller-identity
+
+            echo "📦 Creating kubeconfig for EKS"
+            aws eks update-kubeconfig \
+              --region $AWS_DEFAULT_REGION \
+              --name $EKS_CLUSTER
+
+            echo "🔍 Verifying cluster access"
+            kubectl get nodes
+
+            echo "🚀 Deploying nginx (idempotent)"
+            kubectl create deployment nginx-deployment \
+              --image=nginx \
+              --dry-run=client -o yaml | kubectl apply -f -
+
+            echo "📊 Deployment status"
+            kubectl rollout status deployment/nginx-deployment
+            kubectl get deployments
+          '''
         }
       }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Deployment to EKS completed successfully"
+    }
+    failure {
+      echo "❌ Deployment failed"
     }
   }
 }
