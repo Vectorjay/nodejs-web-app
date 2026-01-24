@@ -76,7 +76,7 @@ pipeline {
                         export APP_NAME="$APP_NAME"
 
                         # Force kubeconfig location
-                        export KUBECONFIG=$HOME/.kube/config
+                        export KUBECONFIG=$HOME/.kube/config_file
 
                         echo "🔎 Kubernetes context"
                         kubectl config current-context
