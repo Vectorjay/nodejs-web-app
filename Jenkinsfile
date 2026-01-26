@@ -2,12 +2,9 @@ pipeline {
     agent any
 
     environment {
+        DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         AWS_REGION   = "us-east-1"
-        AWS_ACCOUNT  = "664574038682"
-        ECR_REGISTRY = "${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        DOCKER_IMAGE = "${ECR_REGISTRY}/nodejs-web-app"
         EKS_CLUSTER  = "web-cluster"
-        APP_NAME     = "nodejs-web-app"
     }
 
     stages {
@@ -25,25 +22,21 @@ pipeline {
                 sh 'npm run build || echo "Build optional"'
             }
         }
-
-        stage('Build & Push Docker Image (ECR)') {
+        stage('Build Docker Image') {
             steps {
                 script {
                     def tag = "build-${env.BUILD_NUMBER}"
                     env.FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${tag}"
 
                     withCredentials([
-                        string(credentialsId: 'jenkins_aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'jenkins_aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY')
+                        usernamePassword(
+                            credentialsId: 'docker-hub-repo',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS'
+                        )
                     ]) {
                         sh """
-                            set -e
-
-                            echo "🔐 Logging into ECR"
-                            aws ecr get-login-password --region ${AWS_REGION} \
-                              | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-                            echo "🐳 Building image: ${FULL_IMAGE_TAG}"
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                             docker build -t ${FULL_IMAGE_TAG} .
                             docker push ${FULL_IMAGE_TAG}
 
@@ -52,7 +45,7 @@ pipeline {
                                 docker push ${DOCKER_IMAGE}:latest
                             fi
 
-                            docker logout ${ECR_REGISTRY}
+                            docker logout
                         """
                     }
                 }
@@ -64,36 +57,55 @@ pipeline {
                 branch 'main'
             }
 
+            environment {
+                AWS_ACCESS_KEY_ID     = credentials('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+                APP_NAME = 'nodejs-web-app'
+            }
+
             steps {
                 script {
-                    withCredentials([
-                        string(credentialsId: 'jenkins_aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'jenkins_aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY')
-                    ]) {
-                        sh """
-                            set -e
+                    echo 'deploying docker image ...'
+                    sh '''
+                        set -e
 
-                            echo "📦 Updating kubeconfig"
-                            mkdir -p \$HOME/.kube
-                            aws eks update-kubeconfig \
-                              --region ${AWS_REGION} \
-                              --name ${EKS_CLUSTER}
+                        echo "🏠 Jenkins HOME"
+                        echo "HOME=$HOME"
 
-                            echo "🔎 Cluster nodes"
-                            kubectl get nodes
+                        # Ensure kube directory exists
+                        mkdir -p $HOME/.kube
 
-                            echo "🚀 Deploying image: ${FULL_IMAGE_TAG}"
-                            kubectl set image deployment/${APP_NAME} \
-                              ${APP_NAME}=${FULL_IMAGE_TAG}
+                        echo "🔐 AWS identity"
+                        aws sts get-caller-identity
 
-                            kubectl rollout status deployment/${APP_NAME}
-                        """
-                    }
+                        echo "📦 Creating kubeconfig for EKS"
+                        aws eks update-kubeconfig \
+                        --region us-east-1 \
+                        --name web-cluster \
+                        --kubeconfig $HOME/.kube/config
+
+                        export KUBECONFIG=$HOME/.kube/config
+
+                        echo "🔎 Kubernetes context"
+                        kubectl config current-context
+                        kubectl get nodes
+
+                        echo "🚀 Deploying application"
+                        export FULL_IMAGE_TAG="$FULL_IMAGE_TAG"
+                        export APP_NAME="$APP_NAME"
+
+                        envsubst < kubernetes/deployment.yaml | kubectl apply -f - --validate=false
+                        envsubst < kubernetes/service.yaml | kubectl apply -f - --validate=false
+                    '''
                 }
             }
+
+
+
+
+
         }
     }
-
     post {
         always {
             sh 'docker system prune -f || true'
