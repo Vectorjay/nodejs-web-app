@@ -7,12 +7,6 @@ metadata:
 spec:
   replicas: 1
 
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1        # create 1 extra pod during update
-      maxUnavailable: 0 # ensure zero downtime
-
   selector:
     matchLabels:
       app: $APP_NAME
@@ -30,11 +24,4 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
-  resources:
-  requests:
-    cpu: "50m"
-    memory: "128Mi"
-  limits:
-    cpu: "200m"
-    memory: "256Mi"
 
