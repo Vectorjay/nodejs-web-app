@@ -38,8 +38,8 @@ pipeline {
                     ]) {
                         sh """
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin $DOCKER_REPO_SERVER 
-                            docker build -t  ${DOCKER_REPO} ${FULL_IMAGE_TAG} .
-                            docker push ${DOCKER_REPO} ${FULL_IMAGE_TAG}
+                            docker build -t  ${FULL_IMAGE_TAG} .
+                            docker push ${FULL_IMAGE_TAG}
 
                             if [ "${BRANCH_NAME}" = "main" ]; then
                                 docker tag ${FULL_IMAGE_TAG} ${DOCKER_REPO}:latest
