@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION   = "us-east-1"
-        AWS_ACCOUNT  = "497248976364"
+        AWS_ACCOUNT  = "664574038682"
         ECR_REGISTRY = "${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         DOCKER_IMAGE = "${ECR_REGISTRY}/nodejs-web-app"
         EKS_CLUSTER  = "web-cluster"
@@ -33,10 +33,8 @@ pipeline {
                     env.FULL_IMAGE_TAG = "${DOCKER_IMAGE}:${tag}"
 
                     withCredentials([
-                        [
-                            $class: 'AmazonWebServicesCredentialsBinding',
-                            credentialsId: 'ecr-creds'
-                        ]
+                        string(credentialsId: 'jenkins_aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'jenkins_aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY')
                     ]) {
                         sh """
                             set -e
@@ -69,25 +67,22 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        [
-                            $class: 'AmazonWebServicesCredentialsBinding',
-                            credentialsId: 'ecr-creds'
-                        ]
+                        string(credentialsId: 'jenkins_aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'jenkins_aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY')
                     ]) {
                         sh """
                             set -e
 
-                            echo "📦 Creating kubeconfig for EKS"
+                            echo "📦 Updating kubeconfig"
                             mkdir -p \$HOME/.kube
                             aws eks update-kubeconfig \
                               --region ${AWS_REGION} \
                               --name ${EKS_CLUSTER}
 
-                            echo "🔎 Cluster status"
+                            echo "🔎 Cluster nodes"
                             kubectl get nodes
 
                             echo "🚀 Deploying image: ${FULL_IMAGE_TAG}"
-
                             kubectl set image deployment/${APP_NAME} \
                               ${APP_NAME}=${FULL_IMAGE_TAG}
 
