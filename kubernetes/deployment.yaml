@@ -17,7 +17,7 @@ spec:
         app: $APP_NAME
     spec:
       imagePullSecrets:
-        - name: my-registry-key
+        - name: aws-registry-key 
       containers:
         - name: $APP_NAME
           image: "$FULL_IMAGE_TAG"
