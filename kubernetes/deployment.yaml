@@ -5,7 +5,7 @@ metadata:
   labels:
     app: $APP_NAME
 spec:
-  replicas: 1
+  replicas: 0
 
   selector:
     matchLabels:
@@ -17,7 +17,7 @@ spec:
         app: $APP_NAME
     spec:
       imagePullSecrets:
-        - name: aws-registry-key 
+        - name: my-registry-key 
       containers:
         - name: $APP_NAME
           image: "$FULL_IMAGE_TAG"
