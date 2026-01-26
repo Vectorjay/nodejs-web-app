@@ -22,7 +22,6 @@ pipeline {
                 sh 'npm run build || echo "Build optional"'
             }
         }
-        ### change to ECR
         stage('Build Docker Image') {
             steps {
                 script {
