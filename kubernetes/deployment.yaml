@@ -20,7 +20,7 @@ spec:
         - name: my-registry-key 
       containers:
         - name: $APP_NAME
-          image: "$FULL_IMAGE_TAG"
+          image: "${DOCKER_REPO}:$FULL_IMAGE_TAG"
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
