@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "vectorzy/nodejs-web-app"
         AWS_REGION   = "us-east-1"
-        EKS_CLUSTER  = "app-cluster"
+        EKS_CLUSTER  = "web-cluster"
     }
 
     stages {
@@ -82,7 +82,7 @@ pipeline {
                         echo "📦 Creating kubeconfig for EKS"
                         aws eks update-kubeconfig \
                         --region us-east-1 \
-                        --name app-cluster \
+                        --name web-cluster \
                         --kubeconfig $HOME/.kube/config
 
                         export KUBECONFIG=$HOME/.kube/config
