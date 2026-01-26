@@ -20,7 +20,7 @@ spec:
         - name: my-registry-key
       containers:
         - name: $APP_NAME
-          image: nodejs-web-app:$FULL_IMAGE_TAG
+          image: $IMAGE_REPO:$IMAGE_TAG
           imagePullPolicy: Always
           ports:
             - containerPort: 3000 
