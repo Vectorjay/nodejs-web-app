@@ -48,7 +48,12 @@ pipeline {
                 }
             }
         }
-        
+
+        stage ('provision server'){
+            // tf provision server
+
+        }
+
         stage('Deploy to Server') {
             when {
                 branch 'main'
