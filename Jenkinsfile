@@ -57,7 +57,7 @@ pipeline {
                 script {
                     sshagent(['ubuntu-server-key']) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@100.24.9.190 "
+                            ssh -o StrictHostKeyChecking=no ubuntu@3.92.152.195"
                                 # Pull the new image
                                 docker pull ${env.FULL_IMAGE_TAG}
                                 
