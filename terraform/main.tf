@@ -1,5 +1,5 @@
 provider "aws"{
-    default = var.region
+    region = var.region
 }
 
 resource "aws_vpc" "myapp_vpc"{
