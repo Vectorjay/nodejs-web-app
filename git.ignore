@@ -272,3 +272,6 @@ pipeline {
         }
     }
 }
+
+
+node_modules/
