@@ -7,9 +7,7 @@ variable  subnet_cidr_block {
 variable  env_prefix {
     default = "dev"
 }
-variable  my_ip {
-    default = "98.97.76.195/32"
-}
+
 variable  instance_type {
     default = "t2.micro"
 } 
