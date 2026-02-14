@@ -11,7 +11,7 @@ variable  my_ip {
     default = "98.97.76.195/32"
 }
 variable  instance_type {
-    default = "t3.medium"
+    default = "t2.micro"
 } 
 variable  availability_zone {
     default = "us-east-1a"
