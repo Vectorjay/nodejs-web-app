@@ -49,15 +49,40 @@ pipeline {
             }
         }
 
+        stage {
+            environment {
+                AWS_ACCESS_KEY_ID = credentials ('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials ('jenkins_aws_secret_access_key')
+                TF_VAR_env_prefix = 'test'
+            }
+            script{
+                dir('terraform') {
+                    sh "terrafom init"
+                    sh "terraform apply --auto-apply"
+                    EC2_PUBLIC_IP = sh (
+                        script: "terraform output ec2_public_ip"
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+
+        }
+
         stage('Deploy to Server') {
             when {
                 branch 'main'
             }
             steps {
                 script {
+                    echo "waiting for EC2 server to initialize"
+                    sleep(time: 90, unit: "SECONDS")
+
+                    echo "deploying docker image to ec2..."
+                    echo "${EC2_PUBLIC_IP}"
+                    
                     sshagent(['ubuntu-server-key']) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@44.202.208.164 "
+                            ssh -o StrictHostKeyChecking=no ubuntu@${EC2_PUBLIC_IP} "
                                 # Pull the new image
                                 docker pull ${env.FULL_IMAGE_TAG}
                                 
