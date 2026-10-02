@@ -1,0 +1,8 @@
+[_]
+schema-version = "0.2"
+id = "io.buildpacks.node-app"
+name = "node app"
+version = "1.0.0"
+
+[io.buildpacks]
+builder = "gcr.io/buildpacks/builder:google-22"
